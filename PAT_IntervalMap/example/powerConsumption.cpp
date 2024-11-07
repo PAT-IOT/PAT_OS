@@ -1,6 +1,28 @@
 #include <Arduino.h>
 #include "../src/PAT_IntervalMap.h"
 
+// Function to monitor power consumption for each zone
+void monitorZonePowerConsumption(IntervalMap<int, String> &zoneMap, int *consumption, int size)
+{
+    for (int i = 0; i < size; i++)
+    {
+        String status = zoneMap[consumption[i]];
+        Serial.print("Power Consumption: ");
+        Serial.print(consumption[i]);
+        Serial.print(" kWh - Status: ");
+        Serial.println(status);
+
+        // Take action if necessary based on the status
+        if (status == "Overload")
+        {
+            Serial.println("Action: Trigger overload protection!");
+        }
+        if (status == "High Power Consumption")
+        {
+            Serial.println("Action: Send alert for high consumption!");
+        }
+    }
+}
 // Define time-based intervals for each zone power consumption
 void setup()
 {
@@ -49,28 +71,6 @@ void setup()
     monitorZonePowerConsumption(zone3PowerMap, zone3Consumption, 3);
 }
 
-// Function to monitor power consumption for each zone
-void monitorZonePowerConsumption(IntervalMap<int, String> &zoneMap, int *consumption, int size)
-{
-    for (int i = 0; i < size; i++)
-    {
-        String status = zoneMap[consumption[i]];
-        Serial.print("Power Consumption: ");
-        Serial.print(consumption[i]);
-        Serial.print(" kWh - Status: ");
-        Serial.println(status);
-
-        // Take action if necessary based on the status
-        if (status == "Overload")
-        {
-            Serial.println("Action: Trigger overload protection!");
-        }
-        if (status == "High Power Consumption")
-        {
-            Serial.println("Action: Send alert for high consumption!");
-        }
-    }
-}
 
 void loop()
 {
