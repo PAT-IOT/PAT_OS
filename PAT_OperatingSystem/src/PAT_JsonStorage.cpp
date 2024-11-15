@@ -11,7 +11,7 @@ bool JsonStorage::loadFromFile(const char *path, int maxRetries)
     {
       Serial.println("Failed to open file, retrying...");
       attempts++;
-      delay(50); // Small delay before retrying
+      vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay before retrying
     }
     else
     {
@@ -33,6 +33,7 @@ bool JsonStorage::loadFromFile(const char *path, int maxRetries)
   return false;
 }
 //_____________________________________________________________________________________________________________________________________
+// f.g. file/setting/wifi.json  ---->file/setting/wifi_backup.json
 const char *JsonStorage::getBackupFilePath(const char *filePath) const
 {
   size_t length = strlen(filePath);
@@ -58,6 +59,35 @@ const char *JsonStorage::getBackupFilePath(const char *filePath) const
 }
 
 //_____________________________________________________________________________________________________________________________________
+
+// Function to get the backup file path
+const char *JsonStorage::getNameFile(const char *filePath) const
+{
+  // Find the last '/' to isolate the filename
+  const char *lastSlash = strrchr(filePath, '/');
+  const char *fileName = (lastSlash) ? lastSlash + 1 : filePath;
+
+  // Find the last '.' to separate the name from the extension
+  const char *lastDot = strrchr(fileName, '.');
+  size_t nameLength = (lastDot) ? (lastDot - fileName) : strlen(fileName);
+
+  // Allocate memory for the name (including null terminator)
+  char *name = new char[nameLength + 1];
+  strncpy(name, fileName, nameLength);
+  name[nameLength] = '\0'; // Null-terminate the string
+
+  return name;
+}
+//_____________________________________________________________________________________________________________________________________
+
+// Function to extract the name (stem) from the file path
+String JsonStorage::getName(const char *filePath) const
+{
+  return String(*nameFile);
+}
+
+//_____________________________________________________________________________________________________________________________________
+
 fileStatus JsonStorage::initDefaultJson()
 {
   Serial.println("Initializing with default JSON...");
@@ -73,13 +103,19 @@ fileStatus JsonStorage::initDefaultJson()
   }
   return LOADED_ERROR;
 }
+
 //_____________________________________________________________________________________________________________________________________
+
 // Constructor
-JsonStorage::JsonStorage(const char *filePath, const char *defaultJsonString, size_t json_size)
-    : filePath(filePath), defaultJsonString(defaultJsonString), jsonDoc(nullptr), json_size(json_size), mutex(nullptr)
-{
-  filePath_backup = getBackupFilePath(filePath);
-}
+
+// JsonStorage::JsonStorage(const char *filePath, const char *defaultJsonString, size_t json_size)
+//     : filePath(filePath), defaultJsonString(defaultJsonString), jsonDoc(nullptr), json_size(json_size), mutex(nullptr),
+//       updateCallback(nullptr), Class_Log(COLOR_MAGENTA, TEXT_BOLD, "[]: ")
+// {
+//   filePath_backup = getBackupFilePath(filePath);
+//   nameFile = getName(filePath);
+//   openedStatus = LOADED_ERROR;
+// }
 //_____________________________________________________________________________________________________________________________________
 // Destructor
 JsonStorage::~JsonStorage()
@@ -95,12 +131,16 @@ JsonStorage::~JsonStorage()
 // Destructor
 bool JsonStorage::close()
 {
+  openedStatus = LOADED_ERROR;
   if (jsonDoc != nullptr)
   {
     jsonDoc->clear();  // Free the allocated memory inside the document
     delete jsonDoc;    // Delete the DynamicJsonDocument object
     jsonDoc = nullptr; // Set the pointer to nullptr to avoid dangling pointers
   }
+  if (logon)
+    log(COLOR_GREEN, TEXT_NORMAL, "file closed %s\n", nameFile);
+
   return (jsonDoc == nullptr);
 }
 //_____________________________________________________________________________________________________________________________________
@@ -137,56 +177,72 @@ bool JsonStorage::init()
 // Initialize SPIFFS and create mutex, load or initialize JSON
 fileStatus JsonStorage::open()
 {
-  static fileStatus status = LOADED_ERROR;
-  if (!this->init())
+  //------------------------------
+  if (!init())
   {
-    status = LOADED_ERROR;
-    return status;
+    openedStatus = fileStatus::LOADED_ERROR;
+    return openedStatus;
   }
-  if (status != LOADED_FILE)
+
+  if (openedStatus != fileStatus::LOADED_FILE)
   {
-    fileStatus status = this->load();
-    if (status != LOADED_FILE)
+    openedStatus = load();
+    if (openedStatus != fileStatus::LOADED_FILE)
     {
-      this->save();
+      save();
     }
-    return status;
   }
-  return status;
+  //------------------------------
+  if (logon)
+  {
+    switch (openedStatus)
+    {
+    case LOADED_FILE:
+      log(COLOR_GREEN, TEXT_NORMAL, "File opened successfully.\n");
+      break;
+    case LOADED_BACKUP_FILE:
+      log(COLOR_GREEN, TEXT_NORMAL, "File could not be opened, using backup file.\n");
+      break;
+    case LOADED_DEFAULT_FILE:
+      log(COLOR_YELLOW, TEXT_BOLD, "File could not be opened, using default file.\n");
+      break;
+    default:
+      log(COLOR_RED, TEXT_BOLD, "Failed to open file, backup file, and default file.\n");
+      break;
+    }
+  }
+
+  return openedStatus;
 }
 //_____________________________________________________________________________________________________________________________________
 fileStatus JsonStorage::load(int maxRetries)
 {
   if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE)
   {
-    bool loaded = false;
+    fileStatus status = LOADED_ERROR;
 
-    // Try to load from the primary file
+    // Attempt to load from the primary file
     if (loadFromFile(filePath, maxRetries))
     {
-      loaded = true;
-      xSemaphoreGive(mutex); // Release mutex before returning
-      return LOADED_FILE;
+      status = LOADED_FILE;
     }
-
-    // Try to load from the backup file
-    if (loadFromFile(filePath_backup, maxRetries))
+    // Attempt to load from the backup file
+    else if (loadFromFile(filePath_backup, maxRetries))
     {
-      loaded = true;
-      xSemaphoreGive(mutex); // Release mutex before returning
-      return LOADED_BACKUP_FILE;
+      status = LOADED_BACKUP_FILE;
+    }
+    // Initialize default JSON if loading failed
+    else
+    {
+      status = initDefaultJson();
     }
 
-    // If loading failed, initialize default JSON
-    initDefaultJson();
-    xSemaphoreGive(mutex); // Release mutex before returning
-    return LOADED_DEFAULT_FILE;
+    xSemaphoreGive(mutex);
+    return status;
   }
 
-  Serial.println("Failed to take mutex in load.");
   return LOADED_ERROR;
 }
-
 //_____________________________________________________________________________________________________________________________________
 bool JsonStorage::saveToFile(const char *path, const char *data)
 {
@@ -199,7 +255,10 @@ bool JsonStorage::saveToFile(const char *path, const char *data)
 
   if (!file)
   {
-    Serial.printf("Failed to open file for writing path: %s\n", path);
+    if (logon)
+    {
+      log(COLOR_RED, TEXT_NORMAL, "Failed to open file for writing path: %s\n", path);
+    }
     return false;
   }
 
@@ -229,7 +288,10 @@ bool JsonStorage::save()
     size_t bytesWritten = serializeJsonPretty(*jsonDoc, fileData); // Correct return type
     if (bytesWritten < 1)
     {
-      Serial.printf("Error(saving) serializing JSON for %s\n", filePath);
+      if (logon)
+      {
+        log(COLOR_RED, TEXT_NORMAL, "Error(saving) serializing JSON for %s\n", filePath);
+      }
       xSemaphoreGive(mutex); // Release mutex before returning
       return false;
     }
@@ -250,12 +312,14 @@ bool JsonStorage::save()
     }
 
     xSemaphoreGive(mutex); // Release the mutex after saving
-
     // Return true only if both saves were successful
     return fileDataSuccess && fileData_backupSuccess;
   }
 
-  Serial.println("Failed to take mutex in save.");
+  if (logon)
+  {
+    log(COLOR_RED, TEXT_NORMAL, "Failed to take mutex in save.");
+  }
   return false;
 }
 
@@ -286,59 +350,82 @@ JsonVariant JsonStorage::operator[](const char *key)
 //_____________________________________________________________________________________________________________________________________
 void JsonStorage::print()
 {
-  if (xSemaphoreTake(mutex, 5000) == pdTRUE)
+  if (xSemaphoreTake(mutex, 3000) == pdTRUE)
   {
-    String output;
-    size_t bytesWritten = serializeJsonPretty(*jsonDoc, output); // Correct return type
-    xSemaphoreGive(mutex);
-
-    if (bytesWritten > 0) // Check if any bytes were written
+    if (openedStatus != LOADED_ERROR) // opened
     {
-      Serial.println(output);
-      Serial.flush();
+      //----------------------------------
+      String output;
+      size_t bytesWritten = serializeJsonPretty(*jsonDoc, output); // Correct return type
+
+      if (bytesWritten > 0) // Check if any bytes were written
+      {
+        Serial.println(output);
+        Serial.flush();
+      }
+      else
+      {
+        if (logon)
+        {
+          log(COLOR_RED, TEXT_NORMAL, "print: Error serializing JSON for %s\n", filePath);
+        }
+
+        Serial.flush();
+      }
+      //----------------------------------
     }
     else
     {
-      Serial.printf("Error serializing JSON for %s\n", filePath);
-      Serial.flush();
+      if (logon)
+      {
+        log(COLOR_RED, TEXT_NORMAL, "print:Error JSON is not opened%s\n", filePath);
+      }
     }
+    xSemaphoreGive(mutex);
   }
   else
   {
-    Serial.printf("Mutex error for %s\n", filePath);
+    if (logon)
+    {
+      log(COLOR_RED, TEXT_NORMAL,"Mutex error for %s\n", filePath);
+    }
     Serial.flush();
   }
 }
 
 //_____________________________________________________________________________________________________________________________________
-// int JsonStorage::max(const char *key)
-// {
-//   // Check if the JSON data is an array
-//   if (!this->json().is<JsonArray>())
-//   {
-//     return -1; // Return -1 if the data isn't a valid JSON array
-//   }
-
-//   JsonArray jsonArray = json().as<JsonArray>();
-//   int maxValue = -1;
-
-//   // Loop through the JSON array and find the max value of the given key
-//   for (JsonObject obj : jsonArray)
-//   {
-//     if (obj.containsKey(key))
-//     {
-//       int value = obj[key].as<int>();
-//       if (value > maxValue)
-//       {
-//         maxValue = value;
-//       }
-//     }
-//   }
-//   return maxValue; // Return the maximum value found
-// }
-
-#include <ArduinoJson.h>
-
+/**
+ * @brief Finds the maximum numeric value for a specified key in a JSON array,
+ *        supporting nested keys via dot notation (e.g., "accounts.balance").
+ *
+ * @param key The key to search for in the JSON array. Nested keys are specified with dot notation.
+ * @return The maximum numeric value found, or -1 if:
+ *         - The key does not exist.
+ *         - The array is empty.
+ *         - No numeric values are found at the specified key path.
+ *
+ * @note Assumes the JSON array is well-formed and that the key points to numeric data.
+ *       For floating-point numbers, the maximum is determined based on standard comparison rules.
+ *
+ * @example
+ * JsonStorage jsonStorage;
+ *
+ *  Example JSON structure:
+ *  {
+ *    "accounts": [
+ *      {"id": 101, "balance": 5000.75},
+ *      {"id": 102, "balance": 3200.50},
+ *      {"id": 103, "balance": 1500.00}
+ *    ]
+ *  }
+ *
+ * int maxBalance = jsonStorage.max("accounts.balance");
+ * Serial.println("Max balance: " + String(maxBalance)); // Output: 5000.75
+ *
+ * @limitations
+ * - Dot notation does not support keys with embedded periods (e.g., "user.data.key").
+ * - Nested arrays are not traversed.
+ */
 int JsonStorage::max(const char *key)
 {
   // Split the key by '.' to handle nested structures, e.g., "accounts.id"
@@ -403,3 +490,4 @@ int JsonStorage::max(const char *key)
 
   return maxValue; // Return the maximum value found
 }
+//_____________________________________________________________________________________________________________________________________
