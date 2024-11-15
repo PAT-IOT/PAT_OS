@@ -105,19 +105,6 @@ fileStatus JsonStorage::initDefaultJson()
   }
   return LOADED_ERROR;
 }
-
-//_____________________________________________________________________________________________________________________________________
-
-// Constructor
-
-// JsonStorage::JsonStorage(const char *filePath, const char *defaultJsonString, size_t json_size)
-//     : filePath(filePath), defaultJsonString(defaultJsonString), jsonDoc(nullptr), json_size(json_size), mutex(nullptr),
-//       updateCallback(nullptr), Class_Log(COLOR_MAGENTA, TEXT_BOLD, "[]: ")
-// {
-//   filePath_backup = getBackupFilePath(filePath);
-//   nameFile = getName(filePath);
-//   openedStatus = LOADED_ERROR;
-// }
 //_____________________________________________________________________________________________________________________________________
 // Destructor
 JsonStorage::~JsonStorage()
@@ -141,7 +128,7 @@ bool JsonStorage::close()
     jsonDoc = nullptr; // Set the pointer to nullptr to avoid dangling pointers
   }
   if (logon)
-    log(COLOR_GREEN, TEXT_NORMAL, "file closed %s\n", nameFile);
+    log(COLOR_GREEN, TEXT_NORMAL, "file closed\n");
 
   return (jsonDoc == nullptr);
 }

@@ -4,9 +4,6 @@
 //===============================================================================================================================================================================================
 //                                                                                         / Configuration
 //===============================================================================================================================================================================================
-operatingSystem os;
-
-Class_ESP operatingSystem::esp;
 
 const char *os_db_json = R"({
     "wifi": {
@@ -98,8 +95,16 @@ const char *os_db_json = R"({
       ]
     }
 })";
-// Initialize the static JsonStorage object
-JsonStorage operatingSystem::db("/os_db.json", os_db_json, strlen(os_db_json) * 2 + 1024);
+
+operatingSystem os;
+
+Class_ESP operatingSystem::esp;
+
+operatingSystem::operatingSystem() : Class_Log(COLOR_MAGENTA, TEXT_BOLD, "[os]: "),
+                                   db("/os_db.json", os_db_json, strlen(os_db_json) * 2 + 1024)
+{
+  // Class_Log::init(COLOR_MAGENTA, TEXT_REVERSE, "[os]: ");
+}
 
 void operatingSystem::init()
 {

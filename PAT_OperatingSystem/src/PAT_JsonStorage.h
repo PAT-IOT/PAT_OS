@@ -8,6 +8,49 @@
 #include <ArduinoJson.h>
 #include "PAT_ObserverSubject.h"
 #include "PAT_Debug.h"
+//============================================================================================
+template <typename... Args>
+void copy_Keys(JsonVariant target, JsonVariant source, Args... keys)
+{
+  // Create an array of the keys for iteration
+  const char *keyArray[] = {keys...}; // Create an array from the parameter pack
+
+  // Iterate over the keys
+  for (const char *key : keyArray)
+  {
+    // Check if source is a JsonObject and contains the key
+    if (source.is<JsonObject>() && source.as<JsonObject>().containsKey(key))
+    {
+      // If the source value is a JsonArray, create a new array in the target
+      if (source[key].is<JsonArray>())
+      {
+        JsonArray sourceArray = source[key].as<JsonArray>();
+        JsonArray targetArray = target.createNestedArray(key); // Create array in target
+        for (JsonVariant item : sourceArray)
+        {
+          targetArray.add(item); // Copy each item from source array to target array
+        }
+      }
+      // If the source value is a JsonObject, create a nested object in the target
+      else if (source[key].is<JsonObject>())
+      {
+        JsonObject sourceObj = source[key].as<JsonObject>();
+        JsonObject targetObj = target.createNestedObject(key); // Create object in target
+        // Use an iterator to copy keys from sourceObj to targetObj
+        for (auto it = sourceObj.begin(); it != sourceObj.end(); ++it)
+        {
+          targetObj[it->key()] = it->value(); // Copy each key-value pair
+        }
+      }
+      // For regular key-value pairs, copy directly
+      else
+      {
+        target[key] = source[key]; // Copy the value from source to target
+      }
+    }
+  }
+}
+//============================================================================================
 #define stateQueue 10
 //============================================================================================
 enum fileStatus
@@ -16,12 +59,14 @@ enum fileStatus
   LOADED_DEFAULT_FILE = 1,
   LOADED_BACKUP_FILE = 2,
   LOADED_FILE = 3
-
 };
 //============================================================================================
+
+// template <typename T = void>
 class JsonStorage : public Observer, public Subject, public Class_Log
 {
 private:
+  // T *injectedObject;
   bool logon;
   std::vector<Observer *>
       observers; // List of observers
@@ -29,6 +74,7 @@ private:
   const char *filePath, *nameFile, *filePath_backup, *defaultJsonString;
   const int json_size;
   std::function<void(JsonVariant)> updateCallback;
+  std::function<void()> prepareForNotification;
   DynamicJsonDocument *jsonDoc;
   fileStatus openedStatus;
   const char *getBackupFilePath(const char *filePath) const;
@@ -51,16 +97,17 @@ public:
   String getName(const char *filePath) const;
   // JsonStorage(const char *filePath, const char *defaultJsonString, size_t json_size = 1024);
   //-----------------------------------
-  JsonStorage(const char *filePath, const char *defaultJsonString, size_t json_size)
+  JsonStorage(const char *filePath, const char *defaultJsonString, size_t json_size) //,  T* injectedObj = nullptr
       : filePath(filePath),
         defaultJsonString(defaultJsonString),
         jsonDoc(nullptr),
         json_size(json_size),
         mutex(xSemaphoreCreateMutex()),
         updateCallback(nullptr),
+        prepareForNotification(nullptr),
         openedStatus(LOADED_ERROR),
-        logon(false),
-        Class_Log(COLOR_MAGENTA, TEXT_BOLD, "[js]: ")
+        logon(false), // injectedObject(injectedObj),
+        Class_Log(COLOR_MAGENTA, TEXT_BOLD, "[js]:")
   {
     filePath_backup = getBackupFilePath(filePath);
     nameFile = getNameFile(filePath);
@@ -72,7 +119,7 @@ public:
     {
       name = nameFile;
     }
-    Class_Log::init(COLOR_LIGHT_BLUE, TEXT_BOLD, "[sm]:[%s]: ", name);
+    Class_Log::init(COLOR_MAGENTA, TEXT_BOLD, "[%s]:", name);
     logon = true;
   }
   void logOff(void)
@@ -113,12 +160,12 @@ public:
     if (openedStatus != LOADED_ERROR)
     {
         if (logon)
-            log(COLOR_GREEN, TEXT_NORMAL, "updateCallback starting for: %s\n", nameFile);
+          log(COLOR_LIGHT_BLUE, TEXT_NORMAL, "updateCallback starting\n");
 
         updateCallback(json);
 
         if (logon)
-            log(COLOR_GREEN, TEXT_NORMAL, "updateCallback finished for: %s\n", nameFile);
+          log(COLOR_BLUE, TEXT_NORMAL, "updateCallback finished\n");
 
         if (wasOpenedError)
         {
@@ -130,13 +177,22 @@ public:
   {
     updateCallback = callback;
   }
-
+  void setPrepareForNotifyCallback(std::function<void()> callback)
+  {
+    prepareForNotification = callback;
+  }
   void notifyObservers() override
   {
-    for (auto observer : observers)
+    if (prepareForNotification)
     {
+      if (logon)
+        log(COLOR_BLUE, TEXT_NORMAL, "setPrepareForNotifyCallback is starting\n");
+      prepareForNotification();
+    }
 
-      observer->update(json().as<JsonVariant>()); // Notify each observer
+    for (auto& observer : observers)
+    {
+      observer->update(json().as<JsonVariant>());
     }
   }
 };

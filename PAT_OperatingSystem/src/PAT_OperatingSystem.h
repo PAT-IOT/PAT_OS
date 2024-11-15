@@ -19,6 +19,7 @@
 #include "PAT_JsonStorage.h"
 #include "PAT_Scheduler.h"
 #include "PAT_Debug.h"
+
 //---------------------------
 
 #define UNIQUE_KEY (String(__FILE__) + "_" + String(__LINE__))
@@ -39,14 +40,11 @@ public:
     std::map<String, StateMachine> sm;
     // template <typename T>
     Event<void *> *ptr;
-    static JsonStorage db;
+    JsonStorage db;
     Class_Scheduler execute;
     //---------------------------------------------------------
 
-    operatingSystem() : Class_Log(COLOR_MAGENTA, TEXT_BOLD, "[os]: ")
-    {
-        // Class_Log::init(COLOR_MAGENTA, TEXT_REVERSE, "[os]: ");
-    }
+    operatingSystem();
 
     ~operatingSystem()
     {
