@@ -100,8 +100,8 @@ fileStatus JsonStorage::initDefaultJson()
   }
   else
   {
-    Serial.print("Failed to parse default JSON string: ");
-    Serial.println(error.c_str());
+    if (logon)
+      log(COLOR_RED, TEXT_BOLD, "Failed to parse default JSON string:%s\n", error.c_str());
   }
   return LOADED_ERROR;
 }
