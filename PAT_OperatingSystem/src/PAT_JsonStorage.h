@@ -9,6 +9,77 @@
 #include "PAT_ObserverSubject.h"
 #include "PAT_Debug.h"
 //============================================================================================
+// Function: copy_Keys2
+// Copies specified keys from a source JsonVariant to a target JsonVariant.
+// Supports copying of keys pointing to primitive values, JsonArrays, and JsonObjects.
+//
+// Template Parameters:
+// - Args: Variadic template for keys to copy.
+//
+// Parameters:
+// - target: The JsonVariant where keys should be copied to.
+// - source: The JsonVariant from which keys should be copied.
+// - keys: The keys to be copied from the source to the target.
+//
+// Example Usage:
+//
+// JsonObject sourceObj, targetObj;
+// sourceObj["key1"] = "value1";
+// sourceObj["key2"] = 42;
+// sourceObj["key3"] = true;
+// sourceObj["array"] = serialized("[1, 2, 3]");
+// sourceObj["object"]["nestedKey"] = "nestedValue";
+//
+// copy_Keys2(targetObj, sourceObj, "key1", "array", "object");
+//
+// Expected Output:
+// targetObj will contain:
+// {
+//   "key1": "value1",
+//   "array": [1, 2, 3],
+//   "object": { "nestedKey": "nestedValue" }
+// // }
+// template <typename... Args>
+// void copy_Keys2(JsonVariant target, JsonVariant source, Args... keys)
+// {
+//   // Create an array of the keys for iteration
+//   const char *keyArray[] = {keys...};
+
+//   // Iterate over the keys
+//   for (const char *key : keyArray)
+//   {
+//     // Check if source is a JsonObject and contains the key
+//     if (source.is<JsonObject>() && source.as<JsonObject>().containsKey(key))
+//     {
+//       // If the source value is a JsonArray, create a new array in the target
+//       if (source[key].is<JsonArray>())
+//       {
+//         JsonArray sourceArray = source[key].as<JsonArray>();
+//         JsonArray targetArray = target.createNestedArray(key);
+//         for (JsonVariant item : sourceArray)
+//         {
+//           targetArray.add(item); // Copy each item
+//         }
+//       }
+//       // If the source value is a JsonObject, create a nested object in the target
+//       else if (source[key].is<JsonObject>())
+//       {
+//         JsonObject sourceObj = source[key].as<JsonObject>();
+//         JsonObject targetObj = target.createNestedObject(key);
+//         for (auto it = sourceObj.begin(); it != sourceObj.end(); ++it)
+//         {
+//           targetObj[it->key()] = it->value(); // Copy each key-value pair
+//         }
+//       }
+//       // For primitive values, directly assign to the target
+//       else
+//       {
+//         target[key] = source[key];
+//       }
+//     }
+//   }
+// }
+//============================================================================================
 template <typename... Args>
 void copy_Keys(JsonVariant target, JsonVariant source, Args... keys)
 {
@@ -169,7 +240,7 @@ public:
 
         if (wasOpenedError)
         {
-            close();
+          // close();
         }
     }
 }

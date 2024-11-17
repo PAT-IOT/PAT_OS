@@ -120,6 +120,8 @@ JsonStorage::~JsonStorage()
 // Destructor
 bool JsonStorage::close()
 {
+  bool openedStatusLast = openedStatus;
+
   openedStatus = LOADED_ERROR;
   if (jsonDoc != nullptr)
   {
@@ -127,11 +129,12 @@ bool JsonStorage::close()
     delete jsonDoc;    // Delete the DynamicJsonDocument object
     jsonDoc = nullptr; // Set the pointer to nullptr to avoid dangling pointers
   }
-  if (logon)
+  if (logon && openedStatusLast != LOADED_ERROR)
     log(COLOR_GREEN, TEXT_NORMAL, "file closed\n");
 
   return (jsonDoc == nullptr);
 }
+
 //_____________________________________________________________________________________________________________________________________
 // Initialize SPIFFS and create mutex, load or initialize JSON
 bool JsonStorage::init()
@@ -167,13 +170,14 @@ bool JsonStorage::init()
 fileStatus JsonStorage::open()
 {
   //------------------------------
+  bool openedStatusLast = openedStatus;
   if (!init())
   {
     openedStatus = fileStatus::LOADED_ERROR;
     return openedStatus;
   }
 
-  if (openedStatus != fileStatus::LOADED_FILE)
+  else if (openedStatus != fileStatus::LOADED_FILE)
   {
     openedStatus = load();
     if (openedStatus != fileStatus::LOADED_FILE)
@@ -182,7 +186,7 @@ fileStatus JsonStorage::open()
     }
   }
   //------------------------------
-  if (logon)
+  if (logon && openedStatusLast == LOADED_ERROR)
   {
     switch (openedStatus)
     {
@@ -260,6 +264,7 @@ bool JsonStorage::saveToFile(const char *path, const char *data)
   {
     Serial.println("Write failed");
     file.close();
+    
     return false; // Write failed
   }
 }
@@ -376,7 +381,7 @@ void JsonStorage::print()
   {
     if (logon)
     {
-      log(COLOR_RED, TEXT_NORMAL,"Mutex error for %s\n", filePath);
+      log(COLOR_RED, TEXT_NORMAL, "Mutex error for %s\n", filePath);
     }
     Serial.flush();
   }

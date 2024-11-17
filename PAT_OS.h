@@ -7,6 +7,6 @@
 #include <stdexcept>
 #include <memory>
 //----------------------------------------
-#include <ArduinoJson.h>
+
 #include "PAT_OperatingSystem/PAT_OperatingSystem.h"
 
