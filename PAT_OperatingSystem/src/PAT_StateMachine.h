@@ -21,9 +21,9 @@ private:
     eventFunction enterHandler, exitHandler, errorHandler;
 
     uint32_t QDelay[stateQueue * 2 + 1];
-    String Q[stateQueue * 2 + 1]; 
-    
-    bool suspended, force_suspend, logon;
+    String Q[stateQueue * 2 + 1];
+
+    bool suspended, force_suspend;
 
     // Execute state transitions if needed
     void executeTransition();
@@ -31,6 +31,8 @@ private:
     //-----------------------------------------------------------------------------------
 public:
     StateMachine();
+    void logOn(String stateMachineName) override;
+    void logOff(void) override;
     // Initialize the state machine with an initial state
     void StartState(const String &stateName, StateFunction stateFunc);
     void StartState(const String &stateName);
@@ -57,8 +59,6 @@ public:
     void cleanState(void);
     String getQ(int state);
     String getState(int state);
-    void logOn(String stateMachine);
-    void logOff(void);
     void printQ(void);
 };
 

@@ -35,8 +35,8 @@ const char *os_db_json = R"({
     "hotspot": {
         "enable": true,
         "dynamic": true,
-        "name": "NovaRealy",
-        "password": "NovaRealy",
+        "name": "NovaRelay",
+        "password": "NovaRelay",
         "ip": "192.168.1.100",
         "gw": "192.168.1.1",
         "sn": "255.255.255.0",
@@ -101,7 +101,7 @@ operatingSystem os;
 Class_ESP operatingSystem::esp;
 
 operatingSystem::operatingSystem() : Class_Log(COLOR_MAGENTA, TEXT_BOLD, "[os]: "),
-                                   db("/os_db.json", os_db_json, strlen(os_db_json) * 2 + 1024)
+                                     db("/os_db.json", os_db_json, strlen(os_db_json) * 2 + 1024)
 {
   // Class_Log::init(COLOR_MAGENTA, TEXT_REVERSE, "[os]: ");
 }

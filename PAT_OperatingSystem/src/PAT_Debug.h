@@ -120,15 +120,50 @@ enum LogLevel
 class Class_Log
 {
   String message;
+  bool logon;
+
+protected:
+  bool isLogOn()
+  {
+    return logon;
+  }
+  void setLogOn()
+  {
+    logon = true;
+  }
+
+  void setLogOff()
+  {
+    logon = true;
+  }
 
 public:
   // Log function with formatting options
   Class_Log(const char *color = COLOR_MAGENTA, const char *styles = TEXT_REVERSE, const char *format = "[log]: ", ...); // Removed 'const'
   void init(const char *color, const char *styles, const char *format, ...);
+  void deInit(void);
+
   void log(const char *color, const char *styles, const char *format, ...) const;
   void log(const char *color, const char *format, ...) const;
   void log(const char *format, ...) const;
   void log(LogLevel level, const char *format, ...) const;
+  //-----------------------------------
+
+  virtual void logOn(String name = "")
+  {
+    init(COLOR_MAGENTA, TEXT_BOLD, "[%s]:", name.c_str());
+    logon = true;
+  }
+  
+  virtual void logOn(void)
+  {
+    logon = true;
+  }
+   virtual void logOff(void)
+  {
+    logon = false;
+    deInit();
+  }
 };
 //-----------------------------------------------------------------------------------------------------------------
 #else

@@ -1,3 +1,6 @@
+#ifndef __PAT_JSONSTORAGE_H__
+#define __PAT_JSONSTORAGE_H__
+
 
 
 #include "PAT_JsonStorage.h"
@@ -11,7 +14,7 @@ bool JsonStorage::loadFromFile(const char *path, int maxRetries)
     File file = SPIFFS.open(path, FILE_READ);
     if (!file)
     {
-      Serial.println("Failed to open file, retrying...");
+      log(COLOR_RED, TEXT_NORMAL, "Failed to open file, retrying...\n");
       attempts++;
       vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay before retrying
     }
@@ -21,17 +24,17 @@ bool JsonStorage::loadFromFile(const char *path, int maxRetries)
       file.close();
       if (!error)
       {
-        // Serial.printf("loaded %s\n", path);
+        // log(COLOR_BLUE, TEXT_NORMAL, "loaded %s\n", path);
         return true;
       }
       else
       {
-        // Serial.printf("error failed to load %s\n", path);
+        log(COLOR_RED, TEXT_NORMAL, "error failed to load %s\n", path);
         return false;
       }
     }
   }
-  // Serial.printf("failed to load %s\n", path);
+  log(COLOR_RED, TEXT_NORMAL, "failed to load %s\n", path);
   return false;
 }
 //_____________________________________________________________________________________________________________________________________
@@ -92,16 +95,15 @@ String JsonStorage::getName(const char *filePath) const
 
 fileStatus JsonStorage::initDefaultJson()
 {
-  Serial.println("Initializing with default JSON...");
   DeserializationError error = deserializeJson(*jsonDoc, defaultJsonString);
   if (!error)
   {
+    log(COLOR_YELLOW, TEXT_NORMAL, "Initializing with default JSON...\n");
     return LOADED_DEFAULT_FILE;
   }
   else
   {
-    if (logon)
-      log(COLOR_RED, TEXT_BOLD, "Failed to parse default JSON string:%s\n", error.c_str());
+    log(COLOR_RED, TEXT_BOLD, "Failed to parse default JSON string:%s\n", error.c_str());
   }
   return LOADED_ERROR;
 }
@@ -129,7 +131,7 @@ bool JsonStorage::close()
     delete jsonDoc;    // Delete the DynamicJsonDocument object
     jsonDoc = nullptr; // Set the pointer to nullptr to avoid dangling pointers
   }
-  if (logon && openedStatusLast != LOADED_ERROR)
+  if (openedStatusLast != LOADED_ERROR)
     log(COLOR_GREEN, TEXT_NORMAL, "file closed\n");
 
   return (jsonDoc == nullptr);
@@ -141,28 +143,30 @@ bool JsonStorage::init()
 {
   if (jsonDoc == nullptr)
   {
+    log(COLOR_GREEN, TEXT_NORMAL, "Initializing DynamicJsonDocument with size %d\n", (json_size + 1) * 2);
     jsonDoc = new DynamicJsonDocument((json_size + 1) * 2);
   }
   if (mutex == nullptr)
   {
+    log(COLOR_GREEN, TEXT_NORMAL, "Initializing mutex...\n");
     mutex = xSemaphoreCreateMutex(); // Initialize the mutex
   }
   if (!SPIFFS.begin(true))
   {
-    Serial.println("Failed to mount SPIFFS");
+    log(COLOR_RED, TEXT_BOLD, "Failed to mount SPIFFS\n");
     delay(500);
     if (!SPIFFS.begin(true))
     {
-      Serial.println("Failed to mount SPIFFS again");
+      log(COLOR_RED, TEXT_BOLD, "Failed to mount SPIFFS again\n");
       delay(500);
       if (!SPIFFS.begin(true))
       {
-        Serial.println("Failed to mount SPIFFS again");
+        log(COLOR_RED, TEXT_BOLD, "Failed to mount SPIFFS again\n");
         return false;
       }
     }
   }
-  // Serial.println("Mounted SPIFFS");
+  log(COLOR_GREEN, TEXT_NORMAL, "Mounted SPIFFS\n");
   return true;
 }
 //_____________________________________________________________________________________________________________________________________
@@ -186,7 +190,7 @@ fileStatus JsonStorage::open()
     }
   }
   //------------------------------
-  if (logon && openedStatusLast == LOADED_ERROR)
+  if (isLogOn() && openedStatusLast == LOADED_ERROR)
   {
     switch (openedStatus)
     {
@@ -239,32 +243,28 @@ fileStatus JsonStorage::load(int maxRetries)
 //_____________________________________________________________________________________________________________________________________
 bool JsonStorage::saveToFile(const char *path, const char *data)
 {
+  log(COLOR_GREEN, TEXT_NORMAL, "Attempting to save file at path: %s\n", path);
   if (!this->init())
   {
+    log(COLOR_RED, TEXT_NORMAL, "Failed to initialize storage prior to saving at path: %s\n", path);
     return false;
   }
-
   File file = SPIFFS.open(path, FILE_WRITE); // Open file for writing
-
   if (!file)
   {
-    if (logon)
-    {
-      log(COLOR_RED, TEXT_NORMAL, "Failed to open file for writing path: %s\n", path);
-    }
+    log(COLOR_RED, TEXT_NORMAL, "Failed to open file for writing path: %s\n", path);
     return false;
   }
-
   if (file.print(data))
   {
     file.close();
+    log(COLOR_GREEN, TEXT_NORMAL, "Successfully saved file at path: %s\n", path);
     return true; // Successfully written
   }
   else
   {
-    Serial.println("Write failed");
+    log(COLOR_RED, TEXT_NORMAL, "Write failed while saving file at path: %s\n", path);
     file.close();
-    
     return false; // Write failed
   }
 }
@@ -277,15 +277,14 @@ bool JsonStorage::save()
 
   String fileData;
 
-  if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE)
+  if (xSemaphoreTake(mutex, pdMS_TO_TICKS(5000)))
   {
     size_t bytesWritten = serializeJsonPretty(*jsonDoc, fileData); // Correct return type
     if (bytesWritten < 1)
     {
-      if (logon)
-      {
+
         log(COLOR_RED, TEXT_NORMAL, "Error(saving) serializing JSON for %s\n", filePath);
-      }
+
       xSemaphoreGive(mutex); // Release mutex before returning
       return false;
     }
@@ -310,17 +309,15 @@ bool JsonStorage::save()
     return fileDataSuccess && fileData_backupSuccess;
   }
 
-  if (logon)
-  {
-    log(COLOR_RED, TEXT_NORMAL, "Failed to take mutex in save.");
-  }
+  log(COLOR_RED, TEXT_NORMAL, "Failed to take mutex in save.");
+
   return false;
 }
 
 //_____________________________________________________________________________________________________________________________________
 DynamicJsonDocument &JsonStorage::json()
 {
-  if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE)
+  if (xSemaphoreTake(mutex, pdMS_TO_TICKS(5000)))
   {
     xSemaphoreGive(mutex);
     return *jsonDoc;
@@ -332,7 +329,7 @@ DynamicJsonDocument &JsonStorage::json()
 //_____________________________________________________________________________________________________________________________________
 JsonVariant JsonStorage::operator[](const char *key)
 {
-  if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE)
+  if (xSemaphoreTake(mutex, pdMS_TO_TICKS(5000)))
   {
     xSemaphoreGive(mutex);
     return (*jsonDoc)[key];
@@ -344,46 +341,37 @@ JsonVariant JsonStorage::operator[](const char *key)
 //_____________________________________________________________________________________________________________________________________
 void JsonStorage::print()
 {
-  if (xSemaphoreTake(mutex, 3000) == pdTRUE)
+  log(COLOR_GREEN, TEXT_NORMAL, "print: Attempting to print JSON for %s\n", filePath);
+  if (xSemaphoreTake(mutex, pdMS_TO_TICKS(5000)))
   {
+    log(COLOR_GREEN, TEXT_NORMAL, "print: Took mutex for %s\n", filePath);
     if (openedStatus != LOADED_ERROR) // opened
     {
       //----------------------------------
       String output;
       size_t bytesWritten = serializeJsonPretty(*jsonDoc, output); // Correct return type
-
       if (bytesWritten > 0) // Check if any bytes were written
       {
-        Serial.println(output);
-        Serial.flush();
+        log(COLOR_LIGHT_GRAY, TEXT_NORMAL, "print:printing JSON for %s\n%s\n", filePath, output.c_str());
+        xSemaphoreGive(mutex);
+        return;
       }
       else
       {
-        if (logon)
-        {
-          log(COLOR_RED, TEXT_NORMAL, "print: Error serializing JSON for %s\n", filePath);
-        }
-
-        Serial.flush();
+        log(COLOR_RED, TEXT_NORMAL, "print: Error serializing JSON for %s\n", filePath);
       }
       //----------------------------------
     }
     else
     {
-      if (logon)
-      {
-        log(COLOR_RED, TEXT_NORMAL, "print:Error JSON is not opened%s\n", filePath);
-      }
+      log(COLOR_RED, TEXT_NORMAL, "print:Error JSON is not opened%s\n", filePath);
     }
-    xSemaphoreGive(mutex);
+        log(COLOR_GREEN, TEXT_NORMAL, "print: Gave mutex for %s\n", filePath);
+        xSemaphoreGive(mutex);
   }
   else
   {
-    if (logon)
-    {
-      log(COLOR_RED, TEXT_NORMAL, "Mutex error for %s\n", filePath);
-    }
-    Serial.flush();
+    log(COLOR_RED, TEXT_NORMAL, "print: Mutex error for %s\n", filePath);
   }
 }
 
@@ -485,3 +473,5 @@ int JsonStorage::max(const char *key)
   return maxValue; // Return the maximum value found
 }
 //_____________________________________________________________________________________________________________________________________
+
+#endif // __PAT_JSONSTORAGE_H__

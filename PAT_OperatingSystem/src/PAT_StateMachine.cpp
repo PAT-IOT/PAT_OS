@@ -2,7 +2,7 @@
 #include "PAT_Debug.h"
 
 StateMachine::StateMachine() : errorHandler(nullptr), enterHandler(nullptr), exitHandler(nullptr),
-                               suspended(false), force_suspend(false), logon(false),
+                               suspended(false), force_suspend(false),
                                Class_Log(COLOR_LIGHT_BLUE, TEXT_BOLD, "[sm]:")
 {
     for (int i = 0; i < stateQueue * 2 + 1; i++)
@@ -56,7 +56,7 @@ void StateMachine::setErrorHandler(eventFunction handler)
 }
 void StateMachine::logOff(void)
 {
-    logon = false;
+    setLogOff();
     enterHandler = nullptr;
     exitHandler = nullptr;
     errorHandler = nullptr;
@@ -64,8 +64,8 @@ void StateMachine::logOff(void)
 
 void StateMachine::logOn(String stateMachineName)
 {
+    setLogOn();
     init(COLOR_LIGHT_BLUE, TEXT_BOLD, "[sm]:[%s]: ", stateMachineName.c_str());
-    logon = true;
 
     onEnterState([&](const String &stateName)
                  {
@@ -112,7 +112,7 @@ void StateMachine::update()
     else
     {
         //----------------------------------------
-        if (!suspended && logon)
+        if (!suspended)
         {
             log(COLOR_ORANGE, TEXT_NORMAL, "suspended %s\n", Q[stateQueue].c_str());
         }
@@ -124,6 +124,9 @@ void StateMachine::update()
 bool StateMachine::forcedSuspend(unsigned long timeout)
 {
     unsigned long startTime = millis();
+    if (!force_suspend)
+        log(COLOR_ORANGE, TEXT_NORMAL, "forced to suspend %s for %lu ms later\n", Q[stateQueue].c_str(), startTime);
+
     force_suspend = true;
     while ((!suspended) && (millis() - startTime < timeout))
     {
@@ -137,14 +140,15 @@ bool StateMachine::isSuspended(void)
 }
 void StateMachine::suspend(void)
 {
+    if (!force_suspend)
+        log(COLOR_ORANGE, TEXT_NORMAL, "suspend %s\n", Q[stateQueue].c_str());
     force_suspend = true;
 }
 void StateMachine::resume(void)
 {
-    if (force_suspend && logon)
-    {
+    if (force_suspend)
         log(COLOR_ORANGE, TEXT_NORMAL, "resume %s\n", Q[stateQueue].c_str());
-    }
+
     force_suspend = false;
 }
 
@@ -165,10 +169,8 @@ void StateMachine::setNextState(const String &stateName, int execute_next_state_
             break;
         }
     }
-    if (!exist && logon)
-    {
+    if (!exist)
         log(COLOR_RED, TEXT_NORMAL, "Error next state queue is full for %s\n", stateName.c_str());
-    }
 }
 bool StateMachine::recentlyDone(const String &stateName)
 {
@@ -186,10 +188,7 @@ String StateMachine::getState(int state)
         {
             return Q[Qstate];
         }
-        if (logon)
-        {
-            log(COLOR_RED, TEXT_NORMAL, "Error input of getQ is not valid\n");
-        }
+        log(COLOR_RED, TEXT_NORMAL, "Error input of getQ is not valid\n");
         return "";
     }
     void StateMachine::printQ(void)
