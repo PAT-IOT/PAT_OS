@@ -32,6 +32,7 @@ private:
   std::function<void(JsonVariant)> updateCallback;
   std::function<void()> prepareForNotification;
   DynamicJsonDocument *jsonDoc;
+  StaticJsonDocument<2048> staticJsonDoc;
   fileStatus openedStatus;
   const char *getBackupFilePath(const char *filePath) const;
   bool loadFromFile(const char *path, int maxRetries = 3);
